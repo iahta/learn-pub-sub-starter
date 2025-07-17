@@ -21,8 +21,6 @@ func main() {
 	defer conn.Close()
 	fmt.Printf("Starting Peril client...\n")
 
-	gamelogic.PrintServerHelp()
-
 	userName, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatalf("error creating User Name: %v", err)
@@ -35,15 +33,38 @@ func main() {
 		log.Fatalf("error declaring: %v", err)
 	}
 
+	gs := gamelogic.NewGameState(userName)
+
+OuterLoop:
 	for {
 		input := gamelogic.GetInput()
-		if len(input) == 0 {
+		cmd := input[0]
+
+		switch cmd {
+		case "spawn":
+			err = gs.CommandSpawn(input)
+			if err != nil {
+				log.Fatalf("error sending spawn command: %v", err)
+			}
+		case "move":
+			_, err := gs.CommandMove(input)
+			if err != nil {
+				log.Fatalf("error sending move command: %v", err)
+			}
+		case "status":
+			gs.CommandStatus()
+		case "help":
+			gamelogic.PrintClientHelp()
+		case "spam":
+			fmt.Printf("Spamming not allowed yet!")
+		case "quit":
+			gamelogic.PrintQuit()
+			break OuterLoop
+		default:
+			fmt.Printf("command not recognized")
 			continue
 		}
-		if input[0] == "pause" {
-			fmt.Printf("Pausing Game\n")
 
-		}
 	}
 
 	signalChan := make(chan os.Signal, 1)
