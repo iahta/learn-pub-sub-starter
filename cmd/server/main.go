@@ -28,6 +28,13 @@ func main() {
 
 	gamelogic.PrintServerHelp()
 
+	key := routing.GameLogSlug + ".*"
+
+	_, _, err = pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, key, pubsub.Durable)
+	if err != nil {
+		log.Fatalf("error declaring: %v", err)
+	}
+
 OuterLoop:
 	for {
 		input := gamelogic.GetInput()
@@ -63,7 +70,7 @@ OuterLoop:
 			fmt.Printf("Exiting Game\n")
 			break OuterLoop
 		default:
-			fmt.Print("Not a known command")
+			fmt.Printf("Not a known command\n")
 		}
 
 	}
