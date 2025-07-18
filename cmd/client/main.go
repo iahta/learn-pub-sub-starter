@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -13,13 +11,14 @@ import (
 )
 
 func main() {
+	fmt.Printf("Starting Peril client...\n")
 	connStr := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(connStr)
 	if err != nil {
 		log.Fatalf("could not connect to RabbitMQ: %v", err)
 	}
 	defer conn.Close()
-	fmt.Printf("Starting Peril client...\n")
+	fmt.Printf("Peril game client connected to RabbitMQ!\n")
 
 	userName, err := gamelogic.ClientWelcome()
 	if err != nil {
@@ -35,40 +34,44 @@ func main() {
 
 	gs := gamelogic.NewGameState(userName)
 
-OuterLoop:
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.Transient, handlerPause(gs))
+	if err != nil {
+		log.Fatalf("error sending pause request: %v", err)
+	}
+
 	for {
 		input := gamelogic.GetInput()
+		if len(input) == 0 {
+			continue
+		}
 		cmd := input[0]
 
 		switch cmd {
 		case "spawn":
 			err = gs.CommandSpawn(input)
 			if err != nil {
-				log.Fatalf("error sending spawn command: %v", err)
+				fmt.Printf("error sending spawn command: %v\n", err)
+				continue
 			}
 		case "move":
 			_, err := gs.CommandMove(input)
 			if err != nil {
-				log.Fatalf("error sending move command: %v", err)
+				fmt.Printf("error sending move command: %v\n", err)
+				continue
 			}
 		case "status":
 			gs.CommandStatus()
 		case "help":
 			gamelogic.PrintClientHelp()
 		case "spam":
-			fmt.Printf("Spamming not allowed yet!")
+			fmt.Printf("Spamming not allowed yet!\n")
 		case "quit":
 			gamelogic.PrintQuit()
-			break OuterLoop
+			return
 		default:
-			fmt.Printf("command not recognized")
+			fmt.Printf("command not recognized\n")
 			continue
 		}
-
 	}
 
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	<-signalChan
-	fmt.Printf("\nRabbitMQ Connection Closed!\n")
 }
