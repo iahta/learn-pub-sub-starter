@@ -24,19 +24,32 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating User Name: %v", err)
 	}
+	fmt.Sprintf("%s.%s")
+	queueName := fmt.Sprintf("%s.%s", routing.PauseKey, userName)
 
-	queueName := routing.PauseKey + "." + userName
+	armyKey := fmt.Sprintf("%s.*", routing.ArmyMovesPrefix)
+	armyName := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, userName)
 
 	_, _, err = pubsub.DeclareAndBind(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.Transient)
 	if err != nil {
-		log.Fatalf("error declaring: %v", err)
+		log.Fatalf("error declaring pause: %v", err)
+	}
+
+	moveCh, _, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, armyName, armyKey, pubsub.Transient)
+	if err != nil {
+		log.Fatalf("error declaring move: %v", err)
 	}
 
 	gs := gamelogic.NewGameState(userName)
 
 	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.Transient, handlerPause(gs))
 	if err != nil {
-		log.Fatalf("error sending pause request: %v", err)
+		log.Fatalf("error retrieving pause request: %v", err)
+	}
+
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, armyName, armyKey, pubsub.Transient, handlerMove(gs))
+	if err != nil {
+		log.Fatalf("error retrieving move request: %v", err)
 	}
 
 	for {
@@ -54,9 +67,14 @@ func main() {
 				continue
 			}
 		case "move":
-			_, err := gs.CommandMove(input)
+			armyMove, err := gs.CommandMove(input)
 			if err != nil {
 				fmt.Printf("error sending move command: %v\n", err)
+				continue
+			}
+			err = pubsub.PublishJSON(moveCh, routing.ExchangePerilTopic, armyName, armyMove)
+			if err != nil {
+				fmt.Printf("error publishing move command: %v\n", err)
 				continue
 			}
 		case "status":
