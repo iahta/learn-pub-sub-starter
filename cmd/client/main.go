@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating User Name: %v", err)
 	}
-	fmt.Sprintf("%s.%s")
+
 	queueName := fmt.Sprintf("%s.%s", routing.PauseKey, userName)
 
 	armyKey := fmt.Sprintf("%s.*", routing.ArmyMovesPrefix)
@@ -44,12 +44,23 @@ func main() {
 
 	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.Transient, handlerPause(gs))
 	if err != nil {
-		log.Fatalf("error retrieving pause request: %v", err)
+		log.Fatalf("could not subsribe to pause: %v", err)
 	}
 
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, armyName, armyKey, pubsub.Transient, handlerMove(gs))
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, armyName, armyKey, pubsub.Transient, handlerMove(gs, moveCh))
 	if err != nil {
-		log.Fatalf("error retrieving move request: %v", err)
+		log.Fatalf("could not subsribe to army moves: %v", err)
+	}
+
+	err = pubsub.SubscribeJSON(conn,
+		routing.ExchangePerilTopic,
+		routing.WarRecognitionsPrefix,
+		routing.WarRecognitionsPrefix+".*",
+		pubsub.Durable,
+		handlerWar(gs),
+	)
+	if err != nil {
+		log.Fatalf("could not subscribe to war declaration: %v", err)
 	}
 
 	for {

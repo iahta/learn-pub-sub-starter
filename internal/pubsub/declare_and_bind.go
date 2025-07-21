@@ -3,6 +3,7 @@ package pubsub
 import (
 	"fmt"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -26,15 +27,19 @@ func DeclareAndBind(conn *amqp.Connection,
 
 	var newQueue amqp.Queue
 
+	deadTable := amqp.Table{
+		"x-dead-letter-exchange": routing.ExchangePerilDead,
+	}
+
 	switch queueType {
 	case Durable:
-		newQueue, err = declareCh.QueueDeclare(queueName, true, false, false, false, nil)
+		newQueue, err = declareCh.QueueDeclare(queueName, true, false, false, false, deadTable)
 		if err != nil {
 			declareCh.Close()
 			return nil, amqp.Queue{}, fmt.Errorf("error declaring durable queue: %v", err)
 		}
 	case Transient:
-		newQueue, err = declareCh.QueueDeclare(queueName, false, true, true, false, nil)
+		newQueue, err = declareCh.QueueDeclare(queueName, false, true, true, false, deadTable)
 		if err != nil {
 			declareCh.Close()
 			return nil, amqp.Queue{}, fmt.Errorf("error declaring transient queue: %v", err)
