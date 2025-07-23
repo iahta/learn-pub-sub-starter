@@ -30,9 +30,9 @@ func main() {
 
 	key := routing.GameLogSlug + ".*"
 
-	_, _, err = pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, key, pubsub.Durable)
+	err = pubsub.SubscribeGob(conn, routing.ExchangePerilTopic, routing.GameLogSlug, key, pubsub.Durable, handlerLogs())
 	if err != nil {
-		log.Fatalf("error declaring: %v", err)
+		log.Fatalf("could not subscribe to gob: %v", err)
 	}
 
 OuterLoop:

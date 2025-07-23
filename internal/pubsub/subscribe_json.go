@@ -1,9 +1,10 @@
 package pubsub
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -24,45 +25,89 @@ func SubscribeJSON[T any](
 	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
 	handler func(T) Acktype,
 ) error {
-	c, _, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+	return subscribe[T](
+		conn,
+		exchange,
+		queueName,
+		key,
+		queueType,
+		handler,
+		func(data []byte) (T, error) {
+			var target T
+			err := json.Unmarshal(data, &target)
+			return target, err
+		},
+	)
+}
+
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
+	handler func(T) Acktype,
+) error {
+	return subscribe[T](
+		conn,
+		exchange,
+		queueName,
+		key,
+		queueType,
+		handler,
+		func(data []byte) (T, error) {
+			buf := bytes.NewBuffer(data)
+			decoder := gob.NewDecoder(buf)
+			var target T
+			err := decoder.Decode(&target)
+			return target, err
+		},
+	)
+}
+
+func subscribe[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType,
+	handler func(T) Acktype,
+	unmarshaller func([]byte) (T, error),
+) error {
+	ch, queue, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
-		return fmt.Errorf("error declaring queue: %v", err)
+		return fmt.Errorf("could not declare and bind queue: %v", err)
 	}
 
-	deliveryChan, err := c.Consume(queueName, "", false, false, false, false, nil)
+	msgs, err := ch.Consume(
+		queue.Name,
+		"",
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
 	if err != nil {
-		return fmt.Errorf("error consuming channel: %v", err)
+		return fmt.Errorf("could not consume messages: %v", err)
 	}
 
 	go func() {
-		for d := range deliveryChan {
-			var msg T
-			err = json.Unmarshal(d.Body, &msg)
+		defer ch.Close()
+		for msg := range msgs {
+			target, err := unmarshaller(msg.Body)
 			if err != nil {
-				log.Printf("error unmarshalling value: %v", err)
+				fmt.Printf("could not unmarshall message: %v", err)
+				continue
 			}
-			ack := handler(msg)
-
-			switch ack {
+			switch handler(target) {
 			case Ack:
-				err = d.Ack(false)
-				if err != nil {
-					log.Printf("error acknowledge could not be delivered to the channel: %v", err)
-				}
-			case NackRequeue:
-				err = d.Nack(false, true)
-				if err != nil {
-					log.Printf("error: could not be requeued to the channel: %v", err)
-				}
-
+				msg.Ack(false)
 			case NackDiscard:
-				err = d.Nack(false, false)
-				if err != nil {
-					log.Printf("error: could not be discarded: %v", err)
-				}
-
+				msg.Nack(false, false)
+			case NackRequeue:
+				msg.Nack(false, true)
 			}
-
 		}
 	}()
 	return nil
