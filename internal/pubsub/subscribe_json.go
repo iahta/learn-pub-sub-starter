@@ -49,19 +49,18 @@ func SubscribeJSON[T any](
 				if err != nil {
 					log.Printf("error acknowledge could not be delivered to the channel: %v", err)
 				}
-				log.Printf("msg acknowledged\n")
 			case NackRequeue:
 				err = d.Nack(false, true)
 				if err != nil {
 					log.Printf("error: could not be requeued to the channel: %v", err)
 				}
-				log.Printf("msg requeued\n")
+
 			case NackDiscard:
 				err = d.Nack(false, false)
 				if err != nil {
 					log.Printf("error: could not be discarded: %v", err)
 				}
-				log.Printf("msg discarded\n")
+
 			}
 
 		}
