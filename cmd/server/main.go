@@ -38,9 +38,10 @@ func main() {
 OuterLoop:
 	for {
 		input := gamelogic.GetInput()
-
-		cmd := input[0]
-
+		cmd := ""
+		if len(input) != 0 {
+			cmd = input[0]
+		}
 		switch cmd {
 		case "":
 			//DO NOTHING
